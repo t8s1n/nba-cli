@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Schedule Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1d428a 0%, #0d1b3e 100%);
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Basketball court pattern */
+        .court-lines {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 60%;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            pointer-events: none;
+        }
+        
+        .court-lines::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .court-lines::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+        }
+        
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Hero */
+        .hero {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .logo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 4rem;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, #c8102e 0%, #fff 50%, #1d428a 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+        
+        .tagline {
+            font-size: 1.3rem;
+            color: rgba(255,255,255,0.7);
+            font-weight: 400;
+        }
+        
+        .auto-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #c8102e 0%, #e8102e 100%);
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-top: 20px;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Section titles */
+        .section-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2rem;
+            letter-spacing: 2px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 28px;
+            background: linear-gradient(to bottom, #c8102e, #fff);
+            border-radius: 2px;
+        }
+        
+        /* Steps */
+        .steps-card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
+        }
+        
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 28px;
+        }
+        
+        .step:last-child {
+            margin-bottom: 0;
+        }
+        
+        .step-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #c8102e 0%, #ff3050 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            color: #fff;
+            flex-shrink: 0;
+            margin-right: 20px;
+            box-shadow: 0 4px 15px rgba(200,16,46,0.4);
+        }
+        
+        .step-content h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+        
+        .step-content p {
+            color: rgba(255,255,255,0.7);
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+        
+        .step-content strong {
+            color: #ffd700;
+        }
+        
+        /* Team grid */
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+        
+        @media (max-width: 500px) {
+            .team-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .team-card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        
+        .team-card:hover {
+            border-color: #c8102e;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(200,16,46,0.2);
+        }
+        
+        .team-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .team-abbrev {
+            width: 44px;
+            height: 44px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1rem;
+            color: #fff;
+            letter-spacing: 1px;
+        }
+        
+        .team-name {
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        
+        .copy-btn {
+            background: linear-gradient(135deg, #c8102e 0%, #e8102e 100%);
+            border: none;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        
+        .copy-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 20px rgba(200,16,46,0.4);
+        }
+        
+        .copy-btn.copied {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4a 100%);
+            color: #000;
+        }
+        
+        /* Conferences section */
+        .conf-section {
+            margin-bottom: 32px;
+        }
+        
+        .conf-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.3rem;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid rgba(255,255,255,0.2);
+        }
+        
+        .conf-title.east { color: #ff6b6b; }
+        .conf-title.west { color: #4ecdc4; }
+        
+        /* Info box */
+        .info-box {
+            background: rgba(255,215,0,0.1);
+            border: 1px solid rgba(255,215,0,0.3);
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .info-box h3 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.5rem;
+            letter-spacing: 1px;
+            color: #ffd700;
+            margin-bottom: 8px;
+        }
+        
+        .info-box p {
+            color: rgba(255,255,255,0.8);
+            line-height: 1.6;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.5);
+            font-size: 0.9rem;
+        }
+        
+        .footer a {
+            color: rgba(255,255,255,0.7);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .footer a:hover {
+            color: #ffd700;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 12px;
+        }
+        
+        /* Mobile */
+        @media (max-width: 600px) {
+            .logo {
+                font-size: 2.8rem;
+            }
+            
+            .tagline {
+                font-size: 1.1rem;
+            }
+            
+            .team-card {
+                flex-direction: column;
+                gap: 12px;
+                text-align: center;
+            }
+            
+            .team-info {
+                flex-direction: column;
+            }
+            
+            .copy-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="court-lines"></div>
+    
+    <div class="container">
+        <div class="hero">
+            <div class="logo">NBA SCHEDULE TRACKER</div>
+            <p class="tagline">Every game. On your calendar. Automatically.</p>
+            <div class="auto-badge">UPDATES DAILY - NEVER MISS A GAME</div>
+        </div>
+        
+        <h2 class="section-title">HOW IT WORKS</h2>
+        
+        <div class="steps-card">
+            <div class="step">
+                <div class="step-icon">1</div>
+                <div class="step-content">
+                    <h3>Open Google Calendar</h3>
+                    <p>Go to <strong>calendar.google.com</strong> on your computer</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-icon">2</div>
+                <div class="step-content">
+                    <h3>Add a new calendar</h3>
+                    <p>Find <strong>"Other calendars"</strong> on the left side. Click the <strong>+</strong> button, then click <strong>"From URL"</strong></p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-icon">3</div>
+                <div class="step-content">
+                    <h3>Paste the link</h3>
+                    <p>Pick your team below, click <strong>"Copy Link"</strong>, paste it in Google Calendar, and hit <strong>"Add calendar"</strong></p>
+                </div>
+            </div>
+        </div>
+        
+        <h2 class="section-title">PICK YOUR TEAM</h2>
+        
+        <div class="conf-section">
+            <h3 class="conf-title east">Eastern Conference</h3>
+            <div class="team-grid" id="east-teams">
+                <!-- Generated by JS -->
+            </div>
+        </div>
+        
+        <div class="conf-section">
+            <h3 class="conf-title west">Western Conference</h3>
+            <div class="team-grid" id="west-teams">
+                <!-- Generated by JS -->
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h3>YOU'RE DONE!</h3>
+            <p>Game times, scores, and playoff games appear automatically.<br>Your calendar updates itself every day. No extra work needed.</p>
+        </div>
+        
+        <div class="footer">
+            <p>Data from NBA.com</p>
+            <div class="footer-links">
+                <a href="https://github.com/t8s1n/nba-cli">GitHub</a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const teams = {
+            east: [
+                { abbrev: 'BOS', name: 'Celtics' },
+                { abbrev: 'BKN', name: 'Nets' },
+                { abbrev: 'NYK', name: 'Knicks' },
+                { abbrev: 'PHI', name: '76ers' },
+                { abbrev: 'TOR', name: 'Raptors' },
+                { abbrev: 'CHI', name: 'Bulls' },
+                { abbrev: 'CLE', name: 'Cavaliers' },
+                { abbrev: 'DET', name: 'Pistons' },
+                { abbrev: 'IND', name: 'Pacers' },
+                { abbrev: 'MIL', name: 'Bucks' },
+                { abbrev: 'ATL', name: 'Hawks' },
+                { abbrev: 'CHA', name: 'Hornets' },
+                { abbrev: 'MIA', name: 'Heat' },
+                { abbrev: 'ORL', name: 'Magic' },
+                { abbrev: 'WAS', name: 'Wizards' },
+            ],
+            west: [
+                { abbrev: 'DEN', name: 'Nuggets' },
+                { abbrev: 'MIN', name: 'Timberwolves' },
+                { abbrev: 'OKC', name: 'Thunder' },
+                { abbrev: 'POR', name: 'Trail Blazers' },
+                { abbrev: 'UTA', name: 'Jazz' },
+                { abbrev: 'GSW', name: 'Warriors' },
+                { abbrev: 'LAC', name: 'Clippers' },
+                { abbrev: 'LAL', name: 'Lakers' },
+                { abbrev: 'PHX', name: 'Suns' },
+                { abbrev: 'SAC', name: 'Kings' },
+                { abbrev: 'DAL', name: 'Mavericks' },
+                { abbrev: 'HOU', name: 'Rockets' },
+                { abbrev: 'MEM', name: 'Grizzlies' },
+                { abbrev: 'NOP', name: 'Pelicans' },
+                { abbrev: 'SAS', name: 'Spurs' },
+            ]
+        };
+        
+        function copyLink(abbrev, btn) {
+            const url = `https://t8s1n.github.io/nba-cli/nba_${abbrev.toLowerCase()}.ics`;
+            navigator.clipboard.writeText(url).then(() => {
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+        
+        function renderTeams(conf, containerId) {
+            const container = document.getElementById(containerId);
+            teams[conf].forEach(team => {
+                const card = document.createElement('div');
+                card.className = 'team-card';
+                card.innerHTML = `
+                    <div class="team-info">
+                        <div class="team-abbrev">${team.abbrev}</div>
+                        <div class="team-name">${team.name}</div>
+                    </div>
+                    <button class="copy-btn" onclick="copyLink('${team.abbrev}', this)">Copy</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+        
+        renderTeams('east', 'east-teams');
+        renderTeams('west', 'west-teams');
+    </script>
+</body>
+</html>

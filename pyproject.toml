@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nba-cli"
+version = "0.1.0"
+description = "NBA schedule tracker with calendar integration"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Jesse Oseafiana"}
+]
+keywords = ["nba", "basketball", "calendar", "schedule", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "nba_api>=1.4.0",
+    "icalendar>=5.0.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "requests>=2.28.0",
+    "pandas>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.scripts]
+nba-cli = "nba_cli.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/t8s1n/nba-cli"
+Repository = "https://github.com/t8s1n/nba-cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]

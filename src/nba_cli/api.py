@@ -132,10 +132,13 @@ class NBAClient:
                             games.append(game)
                     
                     self._delay()
-                    
+
                 except Exception as e:
-                    logger.warning(f"Error fetching games for team {team_id}: {e}")
+                    if "Expecting Value" not in str(e):
+                        logging.warning(f"Error fetching games for team {team_id}: {e}")
                     continue
+                    # logger.warning(f"Error fetching games for team {team_id}: {e}")
+                    # continue
         else:
             # Fetch all games
             try:

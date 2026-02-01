@@ -1,16 +1,13 @@
 """NBA API client for fetching schedule data."""
 
 import logging
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
-import pandas as pd
-from nba_api.stats.endpoints import leaguegamefinder, scoreboardv2
-from nba_api.stats.static import teams as nba_teams_static
+import requests
 
-from .config import NBA_TEAMS, get_team_by_abbrev
+from .config import NBA_TEAMS
 
 logger = logging.getLogger(__name__)
 
@@ -21,223 +18,149 @@ class Game:
     game_id: str
     game_date: datetime
     home_team_id: int
-    home_team: str  # abbreviation
+    home_team: str
     home_team_name: str
     away_team_id: int
-    away_team: str  # abbreviation
+    away_team: str
     away_team_name: str
     home_score: Optional[int] = None
     away_score: Optional[int] = None
     arena: Optional[str] = None
+    arena_city: Optional[str] = None
+    arena_state: Optional[str] = None
     completed: bool = False
     season: str = ""
-    season_type: str = "Regular Season"  # Regular Season, Playoffs, Pre Season, etc.
+    season_type: str = "Regular Season"
     
     @property
     def matchup(self) -> str:
-        """Get formatted matchup string."""
         return f"{self.away_team} @ {self.home_team}"
     
     @property
     def matchup_full(self) -> str:
-        """Get full matchup string."""
         return f"{self.away_team_name} @ {self.home_team_name}"
     
     def involves_team(self, team_abbrev: str) -> bool:
-        """Check if a team is playing in this game."""
         abbrev = team_abbrev.upper()
         return self.home_team == abbrev or self.away_team == abbrev
     
     def involves_team_id(self, team_id: int) -> bool:
-        """Check if a team ID is playing in this game."""
         return self.home_team_id == team_id or self.away_team_id == team_id
     
     @property
-    def score_display(self) -> str:
-        """Get score display string."""
-        if self.completed and self.home_score is not None and self.away_score is not None:
-            return f"{self.away_team} {self.away_score} - {self.home_score} {self.home_team}"
-        return ""
-
-
-def get_team_abbrev_from_id(team_id: int) -> str:
-    """Get team abbreviation from team ID."""
-    for abbrev, info in NBA_TEAMS.items():
-        if info["id"] == team_id:
-            return abbrev
-    return "UNK"
-
-
-def get_team_name_from_id(team_id: int) -> str:
-    """Get team name from team ID."""
-    for abbrev, info in NBA_TEAMS.items():
-        if info["id"] == team_id:
-            return info["name"]
-    return "Unknown"
+    def location(self) -> str:
+        parts = []
+        if self.arena:
+            parts.append(self.arena)
+        if self.arena_city:
+            city_state = self.arena_city
+            if self.arena_state:
+                city_state += f", {self.arena_state}"
+            parts.append(city_state)
+        return ", ".join(parts) if parts else ""
 
 
 class NBAClient:
     """Client for fetching NBA schedule data."""
     
     def __init__(self):
-        self.request_delay = 0.6  # Delay between API requests to avoid rate limiting
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+            "Referer": "https://www.nba.com/",
+        })
     
-    def _delay(self):
-        """Add delay between requests."""
-        time.sleep(self.request_delay)
-    
-    def get_season_games(
-        self,
-        season: str,
-        team_ids: Optional[list[int]] = None,
-        season_type: str = "Regular Season",
-    ) -> list[Game]:
-        """
-        Get all games for a season.
+    def get_full_schedule(self, season_year: int) -> list[Game]:
+        url = f"https://data.nba.com/data/10s/v2015/json/mobile_teams/nba/{season_year}/league/00_full_schedule.json"
+        logger.info(f"Fetching full schedule from {url}")
         
-        Args:
-            season: Season string (e.g., "2024-25")
-            team_ids: Optional list of team IDs to filter
-            season_type: "Regular Season", "Playoffs", "Pre Season", "All Star"
-        """
+        try:
+            response = self.session.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+        except Exception as e:
+            logger.error(f"Failed to fetch schedule: {e}")
+            return []
+        
         games = []
-        seen_game_ids = set()
+        season_str = f"{season_year}-{str(season_year + 1)[2:]}"
         
-        # Convert season format for API (2024-25 -> 2024)
-        season_year = season.split("-")[0]
-        season_id = f"2{season_year}"  # NBA uses format like "22024" for 2024-25
+        for month_data in data.get("lscd", []):
+            month_schedule = month_data.get("mscd", {})
+            for game_data in month_schedule.get("g", []):
+                game = self._parse_game(game_data, season_str)
+                if game:
+                    games.append(game)
         
-        logger.info(f"Fetching {season_type} games for {season}")
-        
-        if team_ids:
-            # Fetch games for each team
-            for team_id in team_ids:
-                try:
-                    gamefinder = leaguegamefinder.LeagueGameFinder(
-                        team_id_nullable=team_id,
-                        season_nullable=season,
-                        season_type_nullable=season_type,
-                        league_id_nullable="00",  # NBA
-                    )
-                    df = gamefinder.get_data_frames()[0]
-                    
-                    for _, row in df.iterrows():
-                        game_id = row["GAME_ID"]
-                        if game_id in seen_game_ids:
-                            continue
-                        seen_game_ids.add(game_id)
-                        
-                        game = self._parse_game_row(row, season)
-                        if game:
-                            games.append(game)
-                    
-                    self._delay()
-
-                except Exception as e:
-                    if "Expecting Value" not in str(e):
-                        logging.warning(f"Error fetching games for team {team_id}: {e}")
-                    continue
-                    # logger.warning(f"Error fetching games for team {team_id}: {e}")
-                    # continue
-        else:
-            # Fetch all games
-            try:
-                gamefinder = leaguegamefinder.LeagueGameFinder(
-                    season_nullable=season,
-                    season_type_nullable=season_type,
-                    league_id_nullable="00",
-                )
-                df = gamefinder.get_data_frames()[0]
-                
-                for _, row in df.iterrows():
-                    game_id = row["GAME_ID"]
-                    if game_id in seen_game_ids:
-                        continue
-                    seen_game_ids.add(game_id)
-                    
-                    game = self._parse_game_row(row, season)
-                    if game:
-                        games.append(game)
-                        
-            except Exception as e:
-                logger.error(f"Error fetching all games: {e}")
-        
-        # Sort by date
-        games.sort(key=lambda g: g.game_date)
-        
-        logger.info(f"Found {len(games)} games")
+        logger.info(f"Found {len(games)} total games")
         return games
     
-    def _parse_game_row(self, row: pd.Series, season: str) -> Optional[Game]:
-        """Parse a game row from the API response."""
+    def _parse_game(self, game_data: dict, season: str) -> Optional[Game]:
         try:
-            game_id = row["GAME_ID"]
-            matchup = row["MATCHUP"]  # e.g., "BOS vs. NYK" or "BOS @ NYK"
-            team_abbrev = row["TEAM_ABBREVIATION"]
-            team_id = row["TEAM_ID"]
+            game_id = game_data.get("gid", "")
+            game_date_str = game_data.get("gdte", "")
+            game_time_str = game_data.get("etm", "")
             
-            # Parse matchup to determine home/away
-            if " vs. " in matchup:
-                # This team is home
-                parts = matchup.split(" vs. ")
-                home_abbrev = parts[0]
-                away_abbrev = parts[1]
-            elif " @ " in matchup:
-                # This team is away
-                parts = matchup.split(" @ ")
-                away_abbrev = parts[0]
-                home_abbrev = parts[1]
+            if game_time_str:
+                try:
+                    game_date = datetime.strptime(game_time_str, "%Y-%m-%dT%H:%M:%S")
+                except ValueError:
+                    game_date = datetime.strptime(game_date_str, "%Y-%m-%d").replace(hour=19, minute=30)
             else:
-                logger.warning(f"Unknown matchup format: {matchup}")
-                return None
+                game_date = datetime.strptime(game_date_str, "%Y-%m-%d").replace(hour=19, minute=30)
             
-            # Get team info
-            home_info = get_team_by_abbrev(home_abbrev)
-            away_info = get_team_by_abbrev(away_abbrev)
+            visitor = game_data.get("v", {})
+            away_team_id = visitor.get("tid", 0)
+            away_abbrev = visitor.get("ta", "")
+            away_name = visitor.get("tn", "")
+            away_city = visitor.get("tc", "")
+            away_score = visitor.get("s")
+            away_score = int(away_score) if away_score and away_score != "" else None
             
-            if not home_info or not away_info:
-                logger.warning(f"Unknown team in matchup: {matchup}")
-                return None
+            home = game_data.get("h", {})
+            home_team_id = home.get("tid", 0)
+            home_abbrev = home.get("ta", "")
+            home_name = home.get("tn", "")
+            home_city = home.get("tc", "")
+            home_score = home.get("s")
+            home_score = int(home_score) if home_score and home_score != "" else None
             
-            # Parse date
-            game_date_str = row["GAME_DATE"]
-            game_date = datetime.strptime(game_date_str, "%Y-%m-%d")
-            # Set a default game time of 7:30 PM ET (approximate)
-            game_date = game_date.replace(hour=19, minute=30)
+            arena = game_data.get("an", "")
+            arena_city = game_data.get("ac", "")
+            arena_state = game_data.get("as", "")
             
-            # Check if completed
-            wl = row.get("WL")
-            completed = wl is not None and wl != ""
+            status = game_data.get("st", 1)
+            completed = status == 3
             
-            # Get scores if completed
-            home_score = None
-            away_score = None
-            if completed:
-                pts = row.get("PTS")
-                if pts is not None:
-                    if team_abbrev == home_abbrev:
-                        home_score = int(pts)
-                    else:
-                        away_score = int(pts)
+            seri = game_data.get("seri", "")
+            if "Playoff" in seri or "Finals" in seri:
+                season_type = "Playoffs"
+            elif "Play-In" in seri:
+                season_type = "Play-In"
+            else:
+                season_type = "Regular Season"
             
             return Game(
-                game_id=game_id,
+                game_id=str(game_id),
                 game_date=game_date,
-                home_team_id=home_info["id"],
+                home_team_id=home_team_id,
                 home_team=home_abbrev,
-                home_team_name=home_info["name"],
-                away_team_id=away_info["id"],
+                home_team_name=f"{home_city} {home_name}",
+                away_team_id=away_team_id,
                 away_team=away_abbrev,
-                away_team_name=away_info["name"],
+                away_team_name=f"{away_city} {away_name}",
                 home_score=home_score,
                 away_score=away_score,
+                arena=arena,
+                arena_city=arena_city,
+                arena_state=arena_state,
                 completed=completed,
                 season=season,
-                season_type=row.get("SEASON_TYPE", "Regular Season") if "SEASON_TYPE" in row else "Regular Season",
+                season_type=season_type,
             )
-            
         except Exception as e:
-            logger.warning(f"Error parsing game row: {e}")
+            logger.warning(f"Error parsing game: {e}")
             return None
     
     def get_full_season_schedule(
@@ -247,34 +170,22 @@ class NBAClient:
         include_preseason: bool = False,
         include_playoffs: bool = True,
     ) -> list[Game]:
-        """
-        Get the full season schedule including regular season and optionally playoffs.
+        season_year = int(season.split("-")[0])
+        all_games = self.get_full_schedule(season_year)
         
-        Args:
-            season: Season string (e.g., "2024-25")
-            team_ids: Optional list of team IDs to filter
-            include_preseason: Include preseason games
-            include_playoffs: Include playoff games
-        """
-        all_games = []
-        seen_ids = set()
-        
-        season_types = ["Regular Season"]
-        if include_preseason:
-            season_types.insert(0, "Pre Season")
-        if include_playoffs:
-            season_types.append("Playoffs")
-        
-        for season_type in season_types:
-            try:
-                games = self.get_season_games(season, team_ids, season_type)
-                for game in games:
-                    if game.game_id not in seen_ids:
-                        seen_ids.add(game.game_id)
-                        game.season_type = season_type
-                        all_games.append(game)
-            except Exception as e:
-                logger.warning(f"Error fetching {season_type} games: {e}")
+        if team_ids:
+            filtered = []
+            seen = set()
+            for g in all_games:
+                if g.game_id in seen:
+                    continue
+                for team_id in team_ids:
+                    if g.involves_team_id(team_id):
+                        seen.add(g.game_id)
+                        filtered.append(g)
+                        break
+            all_games = filtered
         
         all_games.sort(key=lambda g: g.game_date)
+        logger.info(f"Returning {len(all_games)} games")
         return all_games
